@@ -1,15 +1,32 @@
 # Databricks notebook source
-# MAGIC %pip install databricks-feature-engineering
-# MAGIC dbutils.library.restartPython()
+# MAGIC %md
+# MAGIC ###FeatureStore Demo
 
 # COMMAND ----------
 
+#install feature engineering package
+%pip install databricks-feature-engineering
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
+#install libraries
 import scipy.io
+import pandas as pd
+import numpy as np
+from scipy.io import loadmat
 import pandas as pd
 import numpy as np
 from scipy.sparse import vstack
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
+import mlflow
+from mlflow import sklearn
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ###Function to clean the influenza data and vectorize inout and output columns
 
 # COMMAND ----------
 
@@ -47,6 +64,11 @@ X_train_df, y_train_df, X_holdout_df, y_holdout_df = load_influenza_outbreak(fil
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ###Combine train and test dataframe to features
+
+# COMMAND ----------
+
 train = pd.concat([X_train_df, y_train_df], axis=1)
 test = pd.concat([X_holdout_df, y_holdout_df], axis=1)
 
@@ -55,33 +77,24 @@ feature_df = pd.concat([train, test], axis=0)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ###Rename the output column 
+
+# COMMAND ----------
+
+# Rename the last column
+feature_df.columns.values[-1] = '545'
+
+# COMMAND ----------
+
 # Add a primary key column
 feature_df['pkey'] = range(1, len(feature_df) + 1)
-
-# Set the primary key column as the index (optional)
-feature_df.set_index('pkey', inplace=True)
-
 print(feature_df)
 
 # COMMAND ----------
 
-# Assuming feature_df is a pandas DataFrame
-
-# Select only numeric columns
-numeric_columns = feature_df.select_dtypes(include=['int64', 'float64']).columns
-
-# Convert LongType columns to DoubleType
-for column in numeric_columns:
-    feature_df[column] = feature_df[column].astype('float64')
-
-# Convert pandas DataFrame to Spark DataFrame
-sdf = spark.createDataFrame(feature_df)
-
-# Now sdf is the Spark DataFrame with all numeric columns converted to float
-
-# COMMAND ----------
-
-df = spark.createDataFrame(feature_df) 
+# MAGIC %md
+# MAGIC ###Create feature table
 
 # COMMAND ----------
 
@@ -89,9 +102,11 @@ from databricks.feature_engineering import FeatureEngineeringClient
 
 fe = FeatureEngineeringClient()
 
+# Create feature table with `pkey` as the primary key.
+# Take schema from DataFrame output by compute_customer_features
 customer_feature_table = fe.create_table(
-  name='nara_catalog.gilead_ds_workshop._features',
+  name='nara_catalog.gilead_ds_workshop.influenza_outbreak_features',
   primary_keys='pkey',
-  schema=customer_features_df.schema,
-  description='Customer features'
+  schema=feature_df.schema,
+  description='influenza outbreak encoded features'
 )
