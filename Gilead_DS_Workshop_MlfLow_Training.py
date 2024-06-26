@@ -1,4 +1,16 @@
 # Databricks notebook source
+# MAGIC %md
+# MAGIC ###Use Case Description:
+# MAGIC - The data is from the United States. The data comes from different states under different weeks. For each week, the task is to predict whether or not there is an influenza outbreak on the next date. More specifically, for influenza activity, there are four levels of flu activities from minimal to high according to CDC Flu Activity Map. An influenza outbreak occurrence is indicated if the activity level is high.
+
+# COMMAND ----------
+
+# MAGIC %pip install --upgrade "mlflow-skinny[databricks]"
+# MAGIC %pip install xgboost
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
 #import necessary library
 import scipy.io
 import pandas as pd
@@ -6,11 +18,26 @@ import numpy as np
 from scipy.sparse import vstack
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
+import mlflow
+from mlflow import sklearn
 
 # COMMAND ----------
 
-# MAGIC %pip install --upgrade "mlflow-skinny[databricks]"
-# MAGIC dbutils.library.restartPython()
+# MAGIC %md
+# MAGIC ###Dataset Information:
+# MAGIC - The input of the prediction task is the set of the keyword counts for all the tweets in a state in a week.
+# MAGIC - The output is the occurrence of influenza outbreak for the specific state in the next week, which is zero if no event in the next week; or one, otherwise. Here are the briefs of all the variables-
+# MAGIC     - flu_locations': a list of states.
+# MAGIC     - 'flu_keywords': keyword list.
+# MAGIC     - 'flu_X_*': input data for all the locations and all the weeks.
+# MAGIC     - 'flu_Y_*': output data for all the locations and all the weeks.
+# MAGIC
+# MAGIC 525 keywords specified in the variable 'flu_keywords' in the data
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ###Preprocessing Twitter Data
 
 # COMMAND ----------
 
@@ -48,11 +75,13 @@ X_train_df, y_train_df, X_holdout_df, y_holdout_df = load_influenza_outbreak(fil
 
 # COMMAND ----------
 
-import pandas as pd
+# MAGIC %md
+# MAGIC ###Training features on logistic regression
+
+# COMMAND ----------
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-import mlflow
-from mlflow import sklearn
 
 with mlflow.start_run():
   model = LogisticRegression(max_iter=1000)
@@ -76,11 +105,13 @@ mlflow.end_run()
 
 # COMMAND ----------
 
-import pandas as pd
+# MAGIC %md
+# MAGIC ###Training features on random forest
+
+# COMMAND ----------
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-import mlflow
-from mlflow import sklearn
 
 with mlflow.start_run():
     # Initialize the random forest model
@@ -102,6 +133,46 @@ with mlflow.start_run():
         # The signature is automatically inferred from the input example and its predicted output. 
         input_example=input_example, 
         registered_model_name="nara_catalog.gilead_ds_workshop.rf_influenza_outbreak", 
+    )
+    
+    # Evaluate the model
+    accuracy = accuracy_score(y_holdout_df, y_pred)
+    print("Accuracy:", accuracy)
+    # Log the accuracy metric to MLflow
+    mlflow.log_metric("accuracy", accuracy)
+    mlflow.end_run()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ###Training features on xgboost classifier
+
+# COMMAND ----------
+
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score
+from mlflow import xgboost
+
+with mlflow.start_run():
+    # Initialize the XGBoost model
+    model = XGBClassifier(n_estimators=100, random_state=42, use_label_encoder=False, eval_metric='logloss')
+    
+    # Train the model
+    model.fit(X_train_df, y_train_df)
+    
+    # Predict on the holdout set
+    y_pred = model.predict(X_holdout_df)
+    
+    # Take the first row of the training dataset as the model input example.
+    input_example = X_train_df.iloc[[0]]
+    
+    # Log the model to MLflow
+    mlflow.xgboost.log_model(
+        xgb_model=model,  # Change booster=model to xgb_model=model
+        artifact_path="xgb_influenza_outbreak", 
+        # The signature is automatically inferred from the input example and its predicted output. 
+        input_example=input_example, 
+        registered_model_name="nara_catalog.gilead_ds_workshop.xgb_influenza_outbreak", 
     )
     
     # Evaluate the model
