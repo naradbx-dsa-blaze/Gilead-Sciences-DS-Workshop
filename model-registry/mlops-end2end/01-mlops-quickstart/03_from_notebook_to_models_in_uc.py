@@ -27,10 +27,16 @@
 # MAGIC
 # MAGIC We will look at how we test and promote a new __Challenger__ model as a candidate to replace an existing __Champion__ model.
 # MAGIC
-# MAGIC <img src="https://github.com/databricks-demos/dbdemos-resources/blob/main/images/product/mlops/mlops-uc-end2end-3.png?raw=true" width="1200">
+# MAGIC 1. Find best run and push model to UC
+# MAGIC 2. Set model version alias
+# MAGIC 3. Perform model checks (e.g. metrics)
+# MAGIC 4. Validate results
+# MAGIC 5. Promote validated model as "Champion"
+# MAGIC
+# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml-lifecycle-demo.png?raw=true" width="1000">
 # MAGIC
 # MAGIC <!-- Collect usage data (view). Remove it to disable collection or disable tracker during installation. View README for more details.  -->
-# MAGIC <img width="1px" src="https://ppxrzfxige.execute-api.us-west-2.amazonaws.com/v1/analytics?category=data-science&org_id=1444828305810485&notebook=%2F01-mlops-quickstart%2F03_from_notebook_to_models_in_uc&demo_name=mlops-end2end&event=VIEW&path=%2F_dbdemos%2Fdata-science%2Fmlops-end2end%2F01-mlops-quickstart%2F03_from_notebook_to_models_in_uc&version=1">
+# MAGIC <img width="1px" src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml-lifecycle-demo.png?raw=true">
 
 # COMMAND ----------
 
@@ -55,7 +61,7 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Programmatically find best run and push model to the Unity Catalog for validation
+# MAGIC ## Find best run and push model to the Unity Catalog for validation
 # MAGIC
 # MAGIC We have completed the training runs to find a candidate __Challenger__ model. We'll programatically select the best model from our last ML experiment and register it to Unity Catalog. We can easily do that using MLFlow `search_runs` API:
 
@@ -63,10 +69,10 @@
 
 import mlflow
 
-catalog = 'ddavis_demo'
-dbName = 'hls_demo'
-churn_experiment_name = "churn_auto_ml"
-model_name = f"{catalog}.{dbName}.mlops_churn"
+catalog = 'nara_catalog'
+dbName = 'gilead_ds_workshop'
+churn_experiment_name = "lr_influenza_outbreak"
+model_name = f"{catalog}.{dbName}.dd_influenza_outbreak"
 print(f"Finding best run from {churn_experiment_name}_* and pushing new model version to {model_name}")
 
 xp_path = "/Shared/dbdemos/experiments/mlops"
@@ -177,10 +183,151 @@ client.set_registered_model_alias(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Next: Validation of the Challenger model
+# MAGIC ## Fetch Model information
 # MAGIC
-# MAGIC At this point, with the __Challenger__ model registered, we would like to validate the model. The validation steps are implemented in a notebook, so that the validation process can be automated as part of a Databricks Workflow job.
+# MAGIC We will fetch the model information for the __Challenger__ model from Unity Catalog.
+
+# COMMAND ----------
+
+catalog = 'nara_catalog'
+dbName = 'gilead_ds_workshop'
+
+# We are interested in validating the Challenger model
+model_alias = "Challenger"
+model_name = f"{catalog}.{dbName}.mlops_churn"
+
+client = MlflowClient()
+model_details = client.get_model_version_by_alias(model_name, model_alias)
+model_version = int(model_details.version)
+
+print(f"Validating {model_alias} model for {model_name} on model version {model_version}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Model checks
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Benchmark or business metrics on the eval dataset
 # MAGIC
-# MAGIC If the model passes all the tests, it'll be promoted to `Champion`.
+# MAGIC Let's use our validation dataset to check the potential new model impact.
 # MAGIC
-# MAGIC Next: Find out how the model is being tested befored being promoted as `Champion` [using the model validation notebook]($./04_challenger_validation)
+# MAGIC ***Note: This is just to evaluate our models, not to be confused with A/B testing**. A/B testing is done online, splitting the traffic to 2 models and requires a feedback loop to evaluate the effect of the prediction (e.g. after a prediction, did the discount we offered to the customer prevent the churn?). We will cover A/B testing in the advanced part.*
+
+# COMMAND ----------
+
+model_run_id = model_details.run_id
+f1_score = mlflow.get_run(model_run_id).data.metrics['test_f1_score']
+
+try:
+    #Compare the challenger f1 score to the existing champion if it exists
+    champion_model = client.get_model_version_by_alias(model_name, "Champion")
+    champion_f1 = mlflow.get_run(champion_model.run_id).data.metrics['test_f1_score']
+    print(f'Champion f1 score: {champion_f1}. Challenger f1 score: {f1_score}.')
+    metric_f1_passed = f1_score >= champion_f1
+except:
+    print(f"No Champion found. Accept the model as it's the first one.")
+    metric_f1_passed = True
+
+print(f'Model {model_name} version {model_details.version} metric_f1_passed: {metric_f1_passed}')
+# Tag that F1 metric check has passed
+client.set_model_version_tag(name=model_name, version=model_details.version, key="metric_f1_passed", value=metric_f1_passed)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Model performance metric
+# MAGIC
+# MAGIC We want to validate the model performance metric. Typically, we want to compare this metric obtained for the Challenger model agaist that of the Champion model. Since we have yet to register a Champion model, we will only retrieve the metric for the Challenger model without doing a comparison.
+# MAGIC
+# MAGIC The registered model captures information about the MLflow experiment run, where the model metrics were logged during training. This gives you traceability from the deployed model back to the initial training runs.
+# MAGIC
+# MAGIC Here, we will use the F1 score for the out-of-sample test data that was set aside at training time.
+
+# COMMAND ----------
+
+import pyspark.sql.functions as F
+#get our validation dataset:
+validation_df = spark.table('mlops_churn_training').filter("split='validate'")
+
+#Call the model with the given alias and return the prediction
+def predict_churn(validation_df, model_alias):
+    model = mlflow.pyfunc.spark_udf(spark, model_uri=f"models:/{catalog}.{dbName}.mlops_churn@{model_alias}")
+    return validation_df.withColumn('predictions', model(*model.metadata.get_input_schema().input_names()))
+
+# COMMAND ----------
+
+import pandas as pd
+import plotly.express as px
+from sklearn.metrics import confusion_matrix
+
+#Note: this is over-simplified and depends of your use-case, but the idea is to evaluate our model against business metrics
+cost_of_customer_churn = 2000 #in dollar
+cost_of_discount = 500 #in dollar
+
+cost_true_negative = 0 #did not churn, we did not give him the discount
+cost_false_negative = cost_of_customer_churn #did churn, we lost the customer
+cost_true_positive = cost_of_customer_churn -cost_of_discount #We avoided churn with the discount
+cost_false_positive = -cost_of_discount #doesn't churn, we gave the discount for free
+
+def get_model_value_in_dollar(model_alias):
+    print(model_alias)
+    # Convert preds_df to Pandas DataFrame
+    model_predictions = predict_churn(validation_df, model_alias).toPandas()
+    # Calculate the confusion matrix
+    tn, fp, fn, tp = confusion_matrix(model_predictions['churn'], model_predictions['predictions']).ravel()
+    return tn * cost_true_negative+ fp * cost_false_positive + fn * cost_false_negative + tp * cost_true_positive
+
+champion_potential_revenue_gain = get_model_value_in_dollar("Champion")
+challenger_potential_revenue_gain = get_model_value_in_dollar("Challenger")
+
+data = {'Model Alias': ['Challenger', 'Champion'],
+        'Potential Revenue Gain': [challenger_potential_revenue_gain, champion_potential_revenue_gain]}
+
+# Create a bar plot using plotly express
+px.bar(data, x='Model Alias', y='Potential Revenue Gain', color='Model Alias',
+       labels={'Potential Revenue Gain': 'Revenue Impacted'},
+       title='Business Metrics - Revenue Impacted')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Validation results
+# MAGIC
+# MAGIC That's it! We have demonstrated some simple checks on the model. Let's take a look at the validation results.
+
+# COMMAND ----------
+
+results = client.get_model_version(model_name, model_version)
+results.tags
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Promoting the Challenger to Champion
+# MAGIC
+# MAGIC When we are satisfied with the results of the __Challenger__ model, we can then promote it to Champion. This is done by setting its alias to `@Champion`. Inference pipelines that load the model using the `@Champion` alias will then be loading this new model. The alias on the older Champion model, if there is one, will be automatically unset. The model retains its `@Challenger` alias until a newer Challenger model is deployed with the alias to replace it.
+
+# COMMAND ----------
+
+if  results.tags["metric_f1_passed"]:
+  print('register model as Champion!')
+  client.set_registered_model_alias(
+    name=model_name,
+    alias="Champion",
+    version=model_version
+  )
+else:
+  raise Exception("Model not ready for promotion")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Congratulations, our model is now validated and promoted accordingly
+# MAGIC
+# MAGIC We now have the certainty that our model is ready to be used in inference pipelines and in realtime serving endpoints, as it matches our validation standards.
+# MAGIC
+# MAGIC
+# MAGIC Next: [Run batch inference from our newly promoted Champion model]($./05_batch_inference)

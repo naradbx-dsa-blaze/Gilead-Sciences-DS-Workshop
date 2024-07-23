@@ -176,8 +176,8 @@ def get_model_value_in_dollar(model_alias):
 #champion_potential_revenue_gain = get_model_value_in_dollar("Champion")
 challenger_potential_revenue_gain = get_model_value_in_dollar("Challenger")
 
-data = {'Model Alias': ['Challenger', 'Champion'],
-        'Potential Revenue Gain': [challenger_potential_revenue_gain, champion_potential_revenue_gain]}
+#data = {'Model Alias': ['Challenger', 'Champion'],
+        #'Potential Revenue Gain': [challenger_potential_revenue_gain, champion_potential_revenue_gain]}
 
 # Create a bar plot using plotly express
 px.bar(data, x='Model Alias', y='Potential Revenue Gain', color='Model Alias',
