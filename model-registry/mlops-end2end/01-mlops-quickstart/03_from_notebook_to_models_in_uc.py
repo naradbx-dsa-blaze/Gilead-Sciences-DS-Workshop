@@ -1,13 +1,17 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Managing the model lifecycle in Unity Catalog
-# MAGIC **Model Pain Points:**
+# MAGIC <p>
+# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml-lifecycle.png?raw=true" width="1000">
+# MAGIC
+# MAGIC **Common Pain Points without model registry:**
 # MAGIC - Models are scattered
 # MAGIC - Limited visibility into versions and version history
 # MAGIC - Limited visibility into model lifecycle (e.g. staging, production, archived) 
 # MAGIC
-# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml_lifecycle.png?raw=true" width="800">
+# MAGIC ## **Model Registry**
 # MAGIC
+# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml-lifecycle.png?raw=true" width="1000">
 # MAGIC
 # MAGIC [Models in Unity Catalog](https://docs.databricks.com/en/mlflow/models-in-uc.html) addresses this challenge and enables members of the data team to:
 # MAGIC <br>
