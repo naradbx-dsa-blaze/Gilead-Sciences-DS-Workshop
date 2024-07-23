@@ -9,9 +9,9 @@
 # MAGIC - Limited visibility into versions and version history
 # MAGIC - Limited visibility into model lifecycle (e.g. staging, production, archived) 
 # MAGIC
-# MAGIC ## **Model Registry**
-# MAGIC
-# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/ml-lifecycle.png?raw=true" width="1000">
+# MAGIC ## **Models in Unity Catalog**
+# MAGIC <p>
+# MAGIC <img src="https://github.com/naradbx-dsa-blaze/Gilead-Sciences-DS-and-DE-Workshop/blob/feature/ddavis_model_registry/model-registry/img/uc-models.png?raw=true" width="800">
 # MAGIC
 # MAGIC [Models in Unity Catalog](https://docs.databricks.com/en/mlflow/models-in-uc.html) addresses this challenge and enables members of the data team to:
 # MAGIC <br>
@@ -23,19 +23,14 @@
 # MAGIC * **Document** models throughout their lifecycle
 # MAGIC * **Secure** access and permission for model registrations, execution or modifications
 # MAGIC
+# MAGIC ## **What is this notebook doing?**
+# MAGIC
 # MAGIC We will look at how we test and promote a new __Challenger__ model as a candidate to replace an existing __Champion__ model.
 # MAGIC
 # MAGIC <img src="https://github.com/databricks-demos/dbdemos-resources/blob/main/images/product/mlops/mlops-uc-end2end-3.png?raw=true" width="1200">
 # MAGIC
 # MAGIC <!-- Collect usage data (view). Remove it to disable collection or disable tracker during installation. View README for more details.  -->
 # MAGIC <img width="1px" src="https://ppxrzfxige.execute-api.us-west-2.amazonaws.com/v1/analytics?category=data-science&org_id=1444828305810485&notebook=%2F01-mlops-quickstart%2F03_from_notebook_to_models_in_uc&demo_name=mlops-end2end&event=VIEW&path=%2F_dbdemos%2Fdata-science%2Fmlops-end2end%2F01-mlops-quickstart%2F03_from_notebook_to_models_in_uc&version=1">
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ### A cluster has been created for this demo
-# MAGIC To run this demo, just select the cluster `dbdemos-mlops-end2end-dan_davis` from the dropdown menu ([open cluster configuration](https://e2-demo-field-eng.cloud.databricks.com/#setting/clusters/0722-235706-slgc3hqc/configuration)). <br />
-# MAGIC *Note: If the cluster was deleted after 30 days, you can re-create it with `dbdemos.create_cluster('mlops-end2end')` or re-install the demo: `dbdemos.install('mlops-end2end')`*
 
 # COMMAND ----------
 
