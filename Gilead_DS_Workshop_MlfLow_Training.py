@@ -94,6 +94,7 @@ with mlflow.start_run():
         artifact_path="lr_influenza_outbreak", 
         # The signature is automatically inferred from the input example and its predicted output. 
         input_example=input_example, 
+        pip_freeze_requiremts = ["pandas ==0.23"]
         registered_model_name="nara_catalog.gilead_ds_workshop.lr_influenza_outbreak", 
     )
 # Evaluate the model
